@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential autoconf automake libtool pkg-config gettext \
         libxml2-dev libgnutls28-dev zlib1g-dev libproxy-dev \
         liblz4-dev libpskc-dev libp11-kit-dev \
+        vpnc-scripts \
         ca-certificates curl wget xz-utils jq \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,6 +33,7 @@ RUN set -eu; \
     tar xf openconnect.tar.gz --strip-components=1
 
 RUN ./configure --prefix=/usr --without-gssapi --disable-nls \
+        --with-vpnc-script=/usr/share/vpnc-scripts/vpnc-script \
     && make -j"$(nproc)" \
     && make install DESTDIR=/install
 
