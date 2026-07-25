@@ -34,9 +34,18 @@
 - **版本号**：跟随 OpenConnect 上游 GitLab 最新 tag，例如 `9.13`。若本次未检测到新版本，
   仍会用相同版本号重新构建并 **覆盖推送**（用于拉取最新基础镜像安全补丁），同时始终覆盖推送
   `latest` 标签。
-- **多架构**：使用 `docker/setup-qemu-action` 提供 arm64 模拟环境，`podman build --platform`
-  分别构建 amd64/arm64 镜像，再用 `podman manifest` 合并为一个多架构 manifest 推送到
-  Docker Hub。
+- **多架构（原生构建，非 QEMU 交叉编译）**：workflow 分为三个 job：
+  1. `prepare`：统一确定本次构建的版本号；
+  2. `build`：使用矩阵策略，`amd64` 在 GitHub 原生 `ubuntu-latest`（x86_64）runner 上编译，
+     `arm64` 在 GitHub 原生 `ubuntu-24.04-arm`（aarch64）runner 上编译，两边都是真机编译，
+     不使用 `--platform` 参数、不依赖 QEMU 模拟，编译速度和稳定性更好；编译完成后分别推送
+     `<版本>-amd64` / `<版本>-arm64` 两个单架构 tag；
+  3. `manifest`：用 `podman manifest create/add` 把两个单架构镜像合并成一个多架构 manifest，
+     推送最终的 `<版本>` 和 `latest` tag。
+
+  > 注意：`ubuntu-24.04-arm` 原生 arm64 runner 目前仅对**公共仓库**免费提供，私有仓库需要
+  > 企业版 GitHub 或自建 arm64 self-hosted runner；如果你的仓库是私有的，请把
+  > `matrix.runner` 中的 `ubuntu-24.04-arm` 换成自己的 arm64 self-hosted runner 标签。
 
 ### 需要配置的 GitHub Secrets
 
