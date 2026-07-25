@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  openconnect:
+    image: your-dockerhub-user/openconnect:latest
+    container_name: openconnect-site2site
+    restart: unless-stopped
+
+    # site-to-site 场景必需：创建/操作 tun 设备、配置路由和 iptables
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+
+    environment:
+      VPN_GATEWAY: "vpn.example.com"
+      VPN_USERNAME: "your-username"
+      VPN_PASSWORD: "your-password"        # 建议改用 secrets/VPN_PASSWORD_FILE
+      VPN_PROTOCOL: "anyconnect"
+      # 需要通过隧道 NAT 出去的本地网段（多个用逗号分隔）
+      LAN_SUBNET: "192.168.1.0/24"
+      # 如需跳过证书校验，填写服务器证书指纹，例如：
+      # VPN_SERVERCERT: "pin-sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx="
+      # 追加参数示例：
+      # VPN_EXTRA_OPTS: "--authgroup=DefaultGroup --no-dtls"
+
+    # 让局域网内其它主机可以把默认网关指向本容器，实现 site-to-site
+    # 需要以 host 网络模式，或者手动在物理路由器上把目标网段的路由指向本容器 IP
+    # network_mode: host

@@ -1,0 +1,56 @@
+#!/bin/bash
+# vpnc-script-nat
+#
+# 在标准 vpnc-script 完成隧道接口/路由配置之后，
+# 根据 reason ($reason 由 openconnect 传入) 自动添加/清理 NAT 规则，
+# 使容器所在宿主机后面的局域网主机可以通过本容器实现 site-to-site 访问。
+#
+# 依赖环境变量（由 entrypoint.sh 传入）：
+#   LAN_SUBNET   需要通过隧道 NAT 出去的本地网段，逗号分隔，如 "192.168.1.0/24,10.10.0.0/16"
+
+set -e
+
+ORIG_SCRIPT="/usr/share/vpnc-scripts/vpnc-script"
+
+# 先执行官方脚本，完成 tun 接口地址/路由配置
+"$ORIG_SCRIPT" "$@"
+
+log() {
+    echo "[vpnc-script-nat] $*"
+}
+
+case "$reason" in
+    connect)
+        log "隧道 ${TUNDEV} 已建立，开始配置 NAT/转发规则"
+
+        # 出口做 MASQUERADE，让内网机器的源地址伪装成隧道地址
+        iptables -t nat -C POSTROUTING -o "${TUNDEV}" -j MASQUERADE 2>/dev/null \
+            || iptables -t nat -A POSTROUTING -o "${TUNDEV}" -j MASQUERADE
+
+        if [ -n "${LAN_SUBNET:-}" ]; then
+            OLD_IFS="$IFS"
+            IFS=','
+            for NET in $LAN_SUBNET; do
+                NET=$(echo "$NET" | xargs)
+                [ -z "$NET" ] && continue
+                log "放行本地网段 ${NET} <-> 隧道 ${TUNDEV} 的转发"
+                iptables -C FORWARD -s "$NET" -o "${TUNDEV}" -j ACCEPT 2>/dev/null \
+                    || iptables -A FORWARD -s "$NET" -o "${TUNDEV}" -j ACCEPT
+                iptables -C FORWARD -d "$NET" -i "${TUNDEV}" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null \
+                    || iptables -A FORWARD -d "$NET" -i "${TUNDEV}" -m state --state ESTABLISHED,RELATED -j ACCEPT
+            done
+            IFS="$OLD_IFS"
+        else
+            # 未指定具体网段时，放行所有转发流量（信任容器所在网络环境时使用）
+            iptables -C FORWARD -o "${TUNDEV}" -j ACCEPT 2>/dev/null \
+                || iptables -A FORWARD -o "${TUNDEV}" -j ACCEPT
+            iptables -C FORWARD -i "${TUNDEV}" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null \
+                || iptables -A FORWARD -i "${TUNDEV}" -m state --state ESTABLISHED,RELATED -j ACCEPT
+        fi
+        ;;
+
+    disconnect)
+        log "隧道断开，清理 NAT 规则"
+        iptables -t nat -D POSTROUTING -o "${TUNDEV}" -j MASQUERADE 2>/dev/null || true
+        ;;
+esac
