@@ -27,7 +27,8 @@ RUN set -eu; \
     fi; \
     echo "==> 编译 OpenConnect 版本: ${VER}"; \
     echo "${VER}" > /build/VERSION; \
-    curl -fsSL "https://ftp.infradead.org/pub/openconnect/openconnect-${VER}.tar.gz" -o openconnect.tar.gz; \
+    ( curl -fsSL "https://www.infradead.org/openconnect/download/openconnect-${VER}.tar.gz" -o openconnect.tar.gz \
+      || curl -fsSL "ftp://ftp.infradead.org/pub/openconnect/openconnect-${VER}.tar.gz" -o openconnect.tar.gz ); \
     tar xf openconnect.tar.gz --strip-components=1
 
 RUN ./configure --prefix=/usr --without-gssapi --disable-nls \
